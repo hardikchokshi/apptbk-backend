@@ -8,22 +8,24 @@ Covers the whole platform. Frontend-specific notes live in
 **Done**
 - Neon project `ApptBk` has branch `production` (default, all 7 tables imported) and child branch `dev`.
 - Azure resource group `apptbk-prod` exists. Production apps are blocked: the subscription's B1 quota is 0 in every region, and a quota request has been filed with Microsoft (reply expected within ~2 business days).
-- Dev apps: SCM Basic Auth on; API and CPanel on .NET 10; client Node `~22`; API settings `ConnectionStrings__Postgres` and `Cors__AllowedOrigins__0`; CPanel setting `ConnectionStrings__Postgres`.
-- GitHub `dev` environment variables and secrets (`*_PUBLISH_PROFILE`) are set in both repos. The dev apps are `PhysicianBookingAPI20260728210051`, `PhysicianBookingAdminPanel` and `Physician-Client-App` (F1 Windows plan, resource group `PhysicianBookingAPI`).
-- CI/CD is live on `Development` in both repos (PRs `ci-cd-setup` → `Development` merged). Dev auto-deploys:
-  - **API:** deployed, `/health` returns 200 "Healthy".
-  - **Frontend:** deployed and working (frontend PR #2 fixed `web.config` for `/` and added SSR `allowedHosts` in `angular.json`).
-  - **CPanel:** deploy **fails** (OneDeploy 500). See task 2.
+- Dev apps (F1 Windows plan, resource group `PhysicianBookingAPI`): `PhysicianBookingAPI20260728210051` (API), `PhysicianBookingAdminPanel` (CPanel) and `Physician-Client-App` (frontend). SCM Basic Auth on; API and CPanel on .NET 10; client Node `~22`.
+- Dev app settings: API `ConnectionStrings__Postgres` and `Cors__AllowedOrigins__0`; CPanel `ConnectionStrings__Postgres`. Both connection strings use the **key=value** format (see section 6).
+- GitHub `dev` environment variables and secrets (`*_PUBLISH_PROFILE`) are set in both repos.
+- **CI/CD is live on `Development` in both repos.** Every merge builds, tests and deploys to dev. All three dev apps are deployed and working:
+  - **API:** `/health` returns "Healthy", and the data endpoints return results.
+  - **Frontend:** home page, `/physicians` and the home search work. Fixed by frontend PR #2 (`web.config` serves `/` through Node; SSR `allowedHosts` in `angular.json`) and PR #3 (the home search splits "City, ST 12345" into zip, city and state).
+  - **CPanel:** login page and Leads load with data. Fixed by backend PR #3 (removed 437 MB of unused `wwwroot/uploads` images that broke the deploy).
+- Security and code-quality findings are tracked in the private `apptbk-client-app/docs/CODE-REVIEW.md`, not in this public repo.
 
 **Next tasks.** Each one is small, so run each in a new Claude session:
-1. **Rotate leaked secrets (urgent):** the public repo's history has a Neon `neondb_owner` password (endpoint `ep-flat-breeze`) and a Google Places API key in `appsettings.json` (API and CPanel). Reset the Neon password (or delete that project if unused) and revoke or restrict the Google key. The user does this.
-2. **CPanel deploy:** `PhysicianBooking.CPanel/wwwroot/uploads/banners` has 99 committed images of ~9 MB each (437 MB), so the package is 473 MB and the F1 deploy fails. Stop tracking `wwwroot/uploads`, exclude it from publish, and keep the uploads already on the server (a zip deploy can delete files that are not in the package). Decide where uploads live long-term (for example Azure Blob Storage).
+1. **Security items (urgent):** see the private `CODE-REVIEW.md`, items B1 and B2. The user rotates the credentials; the admin-panel fix is code work.
+2. **`/health` should check the database:** it reported "Healthy" while every data request failed. Add a Postgres check and a CPanel smoke test to the pipeline.
 3. **CORS for local dev:** the Azure setting `Cors__AllowedOrigins__0` replaces `http://localhost:4200`. Add `Cors__AllowedOrigins__1 = http://localhost:4200` on the dev API and note it in section 6.
 4. **EmailJS on the dev API:** add the 4 `EmailJsSettings__*` values. The user pastes them.
 5. **Production, once the quota is approved:** create plan `apptbk-prod-plan` (Linux B1, East US 2) and apps `apptbk-api`, `apptbk-cpanel` and `apptbk-web`. Then add the settings (section 6), the GitHub `production` env, merge to `main`, and run the manual deploy. Add the `apptbk-web` azurewebsites host to `allowedHosts` in the frontend `angular.json`.
 6. **Domain:** set up apptbk.com, www and api with DNS, managed certificates and HTTPS Only (section 7).
 7. **Frontend repo:** create a `main` branch for production releases. Only `Development` exists on GitHub so far.
-8. **Code review follow-ups:** make `/health` check Postgres and add a CPanel smoke test; add a `PhysicianBooking.Tests` project (the backend test gate currently runs 0 tests); add tests for the Google Places feature flag and the frontend SEO logic; stop hard-coding `www.apptbk.com` in `index.html`; settle Windows vs Linux for the production frontend in both DEPLOYMENT.md files.
+8. **Code review follow-ups:** add a `PhysicianBooking.Tests` project (the backend test gate currently runs 0 tests); add tests for the Google Places feature flag and the frontend SEO logic; stop hard-coding `www.apptbk.com` in `index.html`; settle Windows vs Linux for the production frontend in both DEPLOYMENT.md files.
 9. **Later:** apply for Microsoft for Startups credits (section 6a), then SEO (sitemap, meta tags, structured data) and the nightly ZIP import job.
 
 ## 1. Repositories
@@ -105,14 +107,16 @@ Set these under App Service → **Settings → Environment variables**. Never pu
 **API app**
 | Name | Value |
 |---|---|
-| `ConnectionStrings__Postgres` | Neon connection string (the `dev` branch for Dev, `main` for Prod) |
+| `ConnectionStrings__Postgres` | Neon connection string (the `dev` branch for Dev, `production` for Prod) in **key=value** format, no quotes: `Host=<endpoint>-pooler.<region>.aws.neon.tech;Database=neondb;Username=neondb_owner;Password=<password>;SSL Mode=Require`. In Neon: **Connect → .NET** gives this format. The `postgresql://...` URL format does **not** work with Npgsql. |
 | `GoogleApi__ApiKey` | Google Places key. **Dev only**: production doesn't need it because the site reads from the DB. |
 | `Features__GooglePlacesImport` | `true` on **Dev only**. Turns on the paid Google import endpoints `/api/GooglePlace/*`. Leave unset in Prod (defaults to off, which returns 404). |
 | `EmailJsSettings__ServiceId` / `__TemplateId` / `__PublicKey` / `__PrivateKey` | EmailJS values |
 | `Cors__AllowedOrigins__0` | Prod: `https://www.apptbk.com`, Dev: the dev site URL |
 | `Cors__AllowedOrigins__1` | Prod: `https://apptbk.com` |
 
-**CPanel app:** `ConnectionStrings__Postgres`
+**CPanel app:** `ConnectionStrings__Postgres` (same format as the API).
+
+**Uploads:** never commit runtime uploads (`**/wwwroot/uploads/` is git-ignored). A large deploy package fails on F1 (OneDeploy 500).
 
 **Runtime stacks**
 - Production (Linux): API and CPanel use **.NET 10 (LTS)**. Azure no longer offers .NET 9, which reached end of support in Nov 2026. The frontend uses **Node 22** with the startup command `node server.js`. Linux ignores `web.config`.
@@ -180,6 +184,11 @@ dotnet user-secrets set "ConnectionStrings:Postgres" "<Neon dev connection strin
 |---|---|
 | CORS error in the browser | `Cors__AllowedOrigins__N` is missing the exact site origin (no trailing slash) |
 | Smoke test fails | Check App Service → Log stream. Usually a missing environment variable. |
+| API data endpoints return 500 but `/health` is "Healthy" | `/health` does not touch the DB. Read Kudu `LogFiles/eventlog.xml`. `Couldn't set postgresql://...` means the connection string is in URL format; `Format of the initialization string does not conform...` means stray quotes or leftover URL parts. Use the key=value format (section 6). |
+| Frontend `/` returns 403 | `web.config` must not skip directories (the `IsDirectory` condition), or the site root never reaches `server.js`. |
+| Frontend pages return 400 Bad Request | The host is missing from `security.allowedHosts` in `angular.json` (Angular SSR rejects unknown hosts). |
+| Deploy fails with OneDeploy 500 | The package is too big for F1. Look for large committed files (e.g. `wwwroot/uploads`). |
+| Site works on a phone but not on your PC ("connection reset" in curl or Chrome) | A router or ISP security filter is blocking the `*.azurewebsites.net` name (seen with a home router's built-in security service). Allow the host names there. |
 | Deploy step 401 | SCM Basic Auth is off, or the publish profile is stale. Download it again. |
 | Prod job skipped | The run was not started by hand on `main`, or the confirm word was not `deploy-production` |
 | Certificate pending | DNS not propagated yet. Check with `nslookup api.apptbk.com`. |
