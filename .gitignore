@@ -1,0 +1,19 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+out/
+publish/
+
+# Visual Studio / IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.slnLaunch.user
+*.pubxml.user
+
+# Local secrets / env files (never commit)
+appsettings.Local.json
+*.env
+.env*
