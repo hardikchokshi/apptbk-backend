@@ -17,3 +17,6 @@ publish/
 appsettings.Local.json
 *.env
 .env*
+
+# Runtime uploads (user content) never belong in git or the deploy package
+**/wwwroot/uploads/
