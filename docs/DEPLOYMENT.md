@@ -10,16 +10,16 @@ Covers the whole platform. Frontend-specific notes live in
 - Azure resource group `apptbk-prod` exists. Production apps are blocked: the subscription's B1 quota is 0 in every region, and a quota request has been filed with Microsoft (reply expected within ~2 business days).
 - Dev apps: SCM Basic Auth on; API and CPanel on .NET 10; client Node `~22`; API settings `ConnectionStrings__Postgres` and `Cors__AllowedOrigins__0`; CPanel setting `ConnectionStrings__Postgres`.
 - GitHub `dev` environment variables are set in both repos.
+- GitHub `dev` secrets `API_PUBLISH_PROFILE` and `CPANEL_PUBLISH_PROFILE` (backend) and `FRONTEND_PUBLISH_PROFILE` (frontend) are set. The dev apps are `PhysicianBookingAPI20260728210051`, `PhysicianBookingAdminPanel` and `Physician-Client-App` (F1 Windows plan, resource group `PhysicianBookingAPI`).
 - Branch `ci-cd-setup` is pushed in both repos. Backend `Development` is pushed.
 
 **Next tasks.** Each one is small, so run each in a new Claude session:
-1. **Publish profiles:** add the GitHub `dev` secrets `API_PUBLISH_PROFILE` and `CPANEL_PUBLISH_PROFILE` (backend) and `FRONTEND_PUBLISH_PROFILE` (frontend). The user pastes them.
-2. **PRs to dev:** open PRs `ci-cd-setup` → `Development` in both repos, wait for **Build & test** to pass, then merge. Dev auto-deploys; check `/health` and the site.
-3. **EmailJS on the dev API:** add the 4 `EmailJsSettings__*` values. The user pastes them.
-4. **Production, once the quota is approved:** create plan `apptbk-prod-plan` (Linux B1, East US 2) and apps `apptbk-api`, `apptbk-cpanel` and `apptbk-web`. Then add the settings (section 6), the GitHub `production` env, merge to `main`, and run the manual deploy.
-5. **Domain:** set up apptbk.com, www and api with DNS, managed certificates and HTTPS Only (section 7).
-6. **Frontend repo:** create a `main` branch for production releases. Only `Development` exists on GitHub so far.
-7. **Later:** apply for Microsoft for Startups credits (section 6a), then SEO (sitemap, meta tags, structured data) and the nightly ZIP import job.
+1. **PRs to dev:** open PRs `ci-cd-setup` → `Development` in both repos, wait for **Build & test** to pass, then merge. Dev auto-deploys; check `/health` and the site.
+2. **EmailJS on the dev API:** add the 4 `EmailJsSettings__*` values. The user pastes them.
+3. **Production, once the quota is approved:** create plan `apptbk-prod-plan` (Linux B1, East US 2) and apps `apptbk-api`, `apptbk-cpanel` and `apptbk-web`. Then add the settings (section 6), the GitHub `production` env, merge to `main`, and run the manual deploy.
+4. **Domain:** set up apptbk.com, www and api with DNS, managed certificates and HTTPS Only (section 7).
+5. **Frontend repo:** create a `main` branch for production releases. Only `Development` exists on GitHub so far.
+6. **Later:** apply for Microsoft for Startups credits (section 6a), then SEO (sitemap, meta tags, structured data) and the nightly ZIP import job.
 
 ## 1. Repositories
 
