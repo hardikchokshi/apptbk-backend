@@ -7,12 +7,15 @@ var builder = WebApplication.CreateBuilder(args);
 
 
 // 1. Add CORS services
+// Allowed origins come from configuration (Cors:AllowedOrigins) so Dev and Production
+// can each allow their own frontend URL. No trailing slashes!
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngularApp",
         policy =>
         {
-            policy.WithOrigins("http://localhost:4200", "https://physicianbookingapi20260728210051-amdrd7dpdegsguft.westcentralus-01.azurewebsites.net") // No trailing slashes!
+            policy.WithOrigins(allowedOrigins)
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
@@ -62,5 +65,8 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Used by the deployment pipeline to confirm the API started correctly.
+app.MapGet("/health", () => Results.Ok("Healthy"));
 
 app.Run();

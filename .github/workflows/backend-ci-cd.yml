@@ -1,0 +1,123 @@
+# Backend CI/CD with gates (API + CPanel)
+#   Gate 1  Pull request -> build + unit tests must pass before merge (enforced by branch protection)
+#   Gate 2  Push to Development -> auto-deploy to "dev" -> /health smoke test
+#   Gate 3  Production deploys ONLY when started by hand:
+#           Actions > Backend CI/CD > Run workflow > branch "main" > type "deploy-production"
+#           (pushing to main only builds + tests; the "production" environment is limited to main) -> /health smoke test
+name: Backend CI/CD
+
+on:
+  pull_request:
+    branches: [Development, main]
+  push:
+    branches: [Development, main]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'On branch "main", type deploy-production to release to Production'
+        required: false
+        default: ''
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOLUTION: PhysicianBooking.API/PhysicianBooking.API.sln
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore $SOLUTION
+
+      - name: Build
+        run: dotnet build $SOLUTION -c Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test $SOLUTION -c Release --no-build --verbosity normal
+
+      - name: Publish API
+        run: dotnet publish PhysicianBooking.API/PhysicianBooking.API.csproj -c Release --no-build -o out/api
+
+      - name: Publish CPanel
+        run: dotnet publish PhysicianBooking.CPanel/PhysicianBooking.CPanel.csproj -c Release --no-build -o out/cpanel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api
+          path: out/api
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpanel
+          path: out/cpanel
+
+  deploy-dev:
+    name: Deploy to Dev
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/Development'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: ${{ vars.API_URL }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+
+      - name: Deploy API
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.API_APP_NAME }}
+          publish-profile: ${{ secrets.API_PUBLISH_PROFILE }}
+          package: out/api
+
+      - name: Deploy CPanel
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.CPANEL_APP_NAME }}
+          publish-profile: ${{ secrets.CPANEL_PUBLISH_PROFILE }}
+          package: out/cpanel
+
+      - name: Smoke test (API /health)
+        run: curl -fsS --retry 10 --retry-delay 15 --retry-all-errors "${{ vars.API_URL }}/health"
+
+  deploy-prod:
+    name: Deploy to Production
+    # Manual gate: only a hand-started run on main with the confirmation word
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm == 'deploy-production'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.API_URL }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+
+      - name: Deploy API
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.API_APP_NAME }}
+          publish-profile: ${{ secrets.API_PUBLISH_PROFILE }}
+          package: out/api
+
+      - name: Deploy CPanel
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.CPANEL_APP_NAME }}
+          publish-profile: ${{ secrets.CPANEL_PUBLISH_PROFILE }}
+          package: out/cpanel
+
+      - name: Smoke test (API /health)
+        run: curl -fsS --retry 10 --retry-delay 15 --retry-all-errors "${{ vars.API_URL }}/health"
